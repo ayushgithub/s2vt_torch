@@ -1,0 +1,5 @@
+*.jpeg
+*.avi
+dataset/images/*
+dataset/video/*
+dataset/raw_json/*

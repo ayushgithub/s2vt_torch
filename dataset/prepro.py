@@ -53,6 +53,8 @@ def prepro_caption(input_list, split):
 		if len(img['caption_tokens']) > max_caption_length:
 			max_caption_length = len(img['caption_tokens'])
 		img['path_list'].sort(key=path_sort_key)
+		if len(img['path_list']) > 60:
+			img['path_list'] = img['path_list'][:61]
 		total_imgs += len(img['path_list'])
 	pass
 
@@ -67,8 +69,8 @@ def encode_captions(input_list, wtoi):
 		assert len(img['caption_tokens']) > 0, 'error: image has no caption'
 		Li = np.zeros((1,max_caption_length), dtype='uint32')
 		label_length[i] = len(img['caption_tokens'])
-		for k,w in enumerate(img['scaption_tokens']):
-			Li[1,k] = wtoi[w]
+		for k,w in enumerate(img['caption_tokens']):
+			Li[0,k] = wtoi[w]
 
 		label_arrays.append(Li)
 
@@ -98,6 +100,33 @@ def build_vocab(input_list):
 	pass
 
 
+def process_images(input_list):
+	global total_imgs
+	image_start_idx = np.zeros((total_imgs,1),dtype='uint32')
+	image_end_idx = np.zeros((total_imgs,1),dtype='uint32')
+	image_vgg = np.zeros((total_imgs,4096))
+	count = 1
+	for i, img in enumerate(input_list):
+		print img['clip_name'], len(img['path_list'])
+		num = len(img['path_list'])
+		image_start_idx[i] = count
+		image_end_idx[i] = count + num - 1
+		image_vgg[count-1 : count + num - 1] = get_image_features(img['path_list'])
+		count += num
+
+	return image_vgg, image_start_idx, image_end_idx
+	pass
+
+def print_distribution(input_list):
+	count = {}
+	for i, img in enumerate(input_list):
+		count[len(img['path_list'])] = count.get(len(img['path_list']),0) + 1
+		if len(img['path_list']) == 355:
+			print img['clip_name']
+	for key in sorted(count):
+	    print "%s: %s" % (key, count[key])
+	pass
+
 def main():
 	global json_root_path, outpath, splits, max_caption_length, total_imgs
 	final_list = []
@@ -105,24 +134,34 @@ def main():
 		input_list = json.load(open(os.path.join(json_root_path, split + '.json')))
 		prepro_caption(input_list, split)
 		final_list += input_list		
-	print total_imgs
+	# print total_imgs
 
 	# path = ['/home1/ayushmn/thesis/mymodels/s2vt_torch/dataset/images/test/BIG_MOMMAS_LIKE_FATHER_LIKE_SON_DVS32_frame_5.jpg']
 	# path = ['/home1/ayushmn/caffe/examples/images/cat.jpg','/home1/ayushmn/caffe/examples/images/cat.jpg']
 	# a = get_image_features(path)
 	# print np.shape(a)
 
-	# vocab = build_vocab(final_list)
-	# itow = {i+1:w for i,w in enumerate(vocab)} # a 1-indexed vocab translation table
-	# wtoi = {w:i+1 for i,w in enumerate(vocab)} # inverse table
-
-	# L, label_length = encode_captions(final_list, wtoi)
-	# f = h5py.File(outpath,'w')
-	# f.create_dataset("labels", dtype='uint32', data=L)
-	# f.create_dataset("label_length", dtype='uint32', data=label_length)
+	# print_distribution(final_list)
 
 
+	vocab = build_vocab(final_list)
+	itow = {i+1:w for i,w in enumerate(vocab)} # a 1-indexed vocab translation table
+	wtoi = {w:i+1 for i,w in enumerate(vocab)} # inverse table
 
+	L, label_length = encode_captions(final_list, wtoi)
+	f = h5py.File(outpath,'w')
+	f.create_dataset("labels", dtype='uint32', data=L)
+	f.create_dataset("label_length", dtype='uint32', data=label_length)
+
+	image_vgg, image_start_idx, image_end_idx = process_images(final_list)
+	f.create_dataset("image_vgg", data=image_vgg)
+	f.create_dataset("image_start_idx", data=image_start_idx)
+	f.create_dataset("image_end_idx",data=image_end_idx)
+
+	out = {}
+	out['itow'] = itow
+	out['final_list'] = final_list
+	json.dump(out, open(outpath[:-2]+'json','w'))
 	pass
 
 if __name__ == '__main__':

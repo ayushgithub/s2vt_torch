@@ -3,3 +3,5 @@
 dataset/images/*
 dataset/video/*
 dataset/raw_json/*
+dataset/*.h5
+dataset/*.json
